@@ -53,10 +53,18 @@ function showLogin() {
   show('login');
 }
 
-// The OAuth callback redirects back with ?auth_error=… when sign-in is refused.
+// The OAuth callback redirects back with ?auth_error=<code> when sign-in is
+// refused. Only known codes are shown, so a crafted link can't put its own
+// text on this page.
+const AUTH_ERRORS = {
+  expired: 'Your sign-in took too long or was started in another browser. Try again.',
+  failed: 'Sign-in failed. Try again.',
+  unverified: 'Your provider did not confirm a verified email address for this account.',
+  not_allowed: 'This account is not allowed to use this sandbox.',
+};
 const authError = new URLSearchParams(location.search).get('auth_error');
 if (authError) {
-  $('#login-error').textContent = authError;
+  $('#login-error').textContent = Object.hasOwn(AUTH_ERRORS, authError) ? AUTH_ERRORS[authError] : AUTH_ERRORS.failed;
   history.replaceState(null, '', location.pathname + location.hash);
 }
 

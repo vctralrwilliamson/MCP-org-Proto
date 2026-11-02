@@ -1,24 +1,30 @@
 import express from 'express';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { registerTools } from './tools.js';
 import { config } from './config.js';
 
+// Fail closed: this server can read and write the whole vector index.
+if (!config.mcpApiKey) {
+  console.error('[http-server] MCP_API_KEY is not set — refusing to start.');
+  process.exit(1);
+}
+
 const app = express();
-app.use(express.json());
+app.disable('x-powered-by');
+// index_document carries a whole document's extracted text.
+app.use(express.json({ limit: '10mb' }));
 
 // sessionId -> transport, one MCP session per connected client (site's
 // chatbot.ts keeps one long-lived connection, so in practice this is small).
 const transports = {};
 
+const sha256 = (value) => createHash('sha256').update(String(value ?? '')).digest();
+
 function requireApiKey(req, res, next) {
-  if (!config.mcpApiKey) {
-    console.warn('[http-server] WARNING: MCP_API_KEY is not set — this endpoint is open to anyone who can reach it.');
-    return next();
-  }
-  if (req.headers['x-mcp-key'] !== config.mcpApiKey) {
+  if (!timingSafeEqual(sha256(req.headers['x-mcp-key']), sha256(config.mcpApiKey))) {
     return res.status(401).json({ error: 'Unauthorized — missing or invalid x-mcp-key header.' });
   }
   next();

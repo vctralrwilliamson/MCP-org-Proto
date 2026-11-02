@@ -3,6 +3,10 @@
 # DNS points at this machine and ports 80/443 are open.
 {$DEV_DOMAIN} {
 	encode gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
 	request_body {
 		max_size 210MB
 	}

@@ -14,7 +14,10 @@ let discovered = null;
 function getConfig() {
   if (!discovered) {
     const { issuer, clientId, clientSecret } = config.oidc;
-    const options = issuer.startsWith('http://') ? { execute: [client.allowInsecureRequests] } : undefined;
+    // Plain http is only ever allowed for a provider on this machine (local testing).
+    const { protocol, hostname } = new URL(issuer);
+    const isLocal = protocol === 'http:' && ['localhost', '127.0.0.1'].includes(hostname);
+    const options = isLocal ? { execute: [client.allowInsecureRequests] } : undefined;
     discovered = client.discovery(new URL(issuer), clientId, clientSecret, undefined, options).catch((err) => {
       discovered = null;
       throw err;
@@ -24,16 +27,25 @@ function getConfig() {
 }
 
 /** Decides whether a signed-in identity may use the sandbox. */
-function isAllowed(email) {
-  const { allowedEmails, allowedDomains } = config.oidc;
-  if (allowedEmails.length === 0 && allowedDomains.length === 0) return true;
-  const domain = email.split('@')[1] || '';
-  return allowedEmails.includes(email) || allowedDomains.includes(domain);
+export function isAllowed(email) {
+  const { allowedEmails, allowedDomains, allowAnyAccount } = config.oidc;
+  if (allowAnyAccount) return true;
+  return allowedEmails.includes(email) || allowedDomains.includes(email.split('@')[1]);
 }
 
-function fail(res, message) {
+/** Returns the identity's email if the provider vouches for it, otherwise null. */
+export function verifiedEmail(claims) {
+  const { trustEmailClaim } = config.oidc;
+  if (claims.email_verified !== true && !trustEmailClaim) return null;
+  const raw = claims.email || (trustEmailClaim ? claims.preferred_username : '');
+  const email = String(raw || '').trim().toLowerCase();
+  return /^[^@\s]+@[^@\s]+$/.test(email) ? email : null;
+}
+
+// Only a fixed code goes in the URL; public/app.js maps it to the message shown.
+function fail(res, code) {
   clearCookie(res, FLOW);
-  res.redirect(`/?auth_error=${encodeURIComponent(message)}`);
+  res.redirect(`/?auth_error=${code}`);
 }
 
 export function mountOidc(app) {
@@ -61,8 +73,11 @@ export function mountOidc(app) {
 
   app.get('/auth/callback', async (req, res) => {
     const flow = readSigned(req, FLOW);
-    if (!flow) return fail(res, 'Your sign-in took too long or was started in another browser. Try again.');
-    if (req.query.error) return fail(res, String(req.query.error_description || req.query.error));
+    if (!flow) return fail(res, 'expired');
+    if (req.query.error) {
+      console.warn('[oidc] provider returned an error:', String(req.query.error).slice(0, 100));
+      return fail(res, 'failed');
+    }
 
     let claims;
     try {
@@ -77,14 +92,12 @@ export function mountOidc(app) {
       claims = tokens.claims();
     } catch (err) {
       console.warn('[oidc] callback failed:', err.message);
-      return fail(res, 'Sign-in failed. Try again.');
+      return fail(res, 'failed');
     }
 
-    // Entra puts the address in preferred_username when the email claim is absent.
-    const email = String(claims.email || claims.preferred_username || '').trim().toLowerCase();
-    if (!email.includes('@')) return fail(res, 'Your account did not share an email address.');
-    if (claims.email_verified === false) return fail(res, 'Your email address is not verified with your provider.');
-    if (!isAllowed(email)) return fail(res, `${email} is not allowed to use this sandbox.`);
+    const email = verifiedEmail(claims);
+    if (!email) return fail(res, 'unverified');
+    if (!isAllowed(email)) return fail(res, 'not_allowed');
 
     clearCookie(res, FLOW);
     setSession(res, email);

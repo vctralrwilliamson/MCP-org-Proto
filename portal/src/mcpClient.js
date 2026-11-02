@@ -1,6 +1,10 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { config } from './config.js';
+
+// Embedding a large document or answering on CPU can take minutes.
+const TOOL_TIMEOUT_MS = 10 * 60 * 1000;
 
 let clientPromise = null;
 
@@ -29,7 +33,7 @@ function getClient() {
 
 async function callOnce(name, args) {
   const client = await getClient();
-  const result = await client.callTool({ name, arguments: args });
+  const result = await client.callTool({ name, arguments: args }, undefined, { timeout: TOOL_TIMEOUT_MS });
   const text = result.content?.find((c) => c.type === 'text')?.text ?? '';
   if (result.isError) throw new ToolError(text || `${name} failed`);
   return text;
@@ -43,7 +47,8 @@ export async function callTool(name, args) {
   try {
     return await callOnce(name, args);
   } catch (err) {
-    if (err instanceof ToolError) throw err;
+    // A timed-out call may still be running on mcp; retrying would double the load.
+    if (err instanceof ToolError || (err instanceof McpError && err.code === ErrorCode.RequestTimeout)) throw err;
     clientPromise = null;
     return callOnce(name, args);
   }

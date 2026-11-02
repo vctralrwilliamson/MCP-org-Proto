@@ -1,23 +1,30 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { config } from './config.js';
 
 const SESSION = 'portal_session';
 
-function sign(value) {
-  return createHmac('sha256', config.sessionSecret).update(value).digest('base64url');
+// The cookie name is part of the signature, so one signed cookie can't be replayed as another.
+function sign(name, value) {
+  return createHmac('sha256', config.sessionSecret).update(`${name}.${value}`).digest('base64url');
 }
 
+const sha256 = (value) => createHash('sha256').update(value).digest();
+
 function safeEqual(a, b) {
-  const ab = Buffer.from(a);
-  const bb = Buffer.from(b);
-  return ab.length === bb.length && timingSafeEqual(ab, bb);
+  return timingSafeEqual(sha256(a), sha256(b));
 }
 
 function readCookie(req, name) {
   const header = req.headers.cookie || '';
   for (const part of header.split(';')) {
     const [k, ...rest] = part.trim().split('=');
-    if (k === name) return decodeURIComponent(rest.join('='));
+    if (k === name) {
+      try {
+        return decodeURIComponent(rest.join('='));
+      } catch {
+        return null;
+      }
+    }
   }
   return null;
 }
@@ -36,7 +43,7 @@ function appendCookie(res, header) {
 /** Stores a JSON payload in an HMAC-signed, expiring cookie. */
 export function setSigned(res, name, payload, maxAgeSec) {
   const body = Buffer.from(JSON.stringify({ ...payload, exp: Date.now() + maxAgeSec * 1000 })).toString('base64url');
-  appendCookie(res, cookieHeader(name, `${body}.${sign(body)}`, maxAgeSec));
+  appendCookie(res, cookieHeader(name, `${body}.${sign(name, body)}`, maxAgeSec));
 }
 
 /** Returns the payload of a signed cookie, or null if missing, tampered with or expired. */
@@ -44,7 +51,7 @@ export function readSigned(req, name) {
   const raw = readCookie(req, name);
   if (!raw) return null;
   const [body, sig] = raw.split('.');
-  if (!body || !sig || !safeEqual(sign(body), sig)) return null;
+  if (!body || !sig || !safeEqual(sign(name, body), sig)) return null;
   try {
     const payload = JSON.parse(Buffer.from(body, 'base64url').toString());
     return payload.exp > Date.now() ? payload : null;

@@ -5,12 +5,22 @@
 #   docker compose up -d --build                   # use an existing Ollama (OLLAMA_URL)
 #   docker compose --profile ollama up -d --build  # also run Ollama here
 #
-# Only Caddy publishes ports. mcp, qdrant and ollama are reachable only on the
-# internal network.
+# Only Caddy publishes ports. The networks are tiered so each service reaches
+# only its neighbours: caddy -> portal -> mcp -> qdrant/ollama.
+
+x-hardening: &hardening
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
 
 services:
   caddy:
-    image: caddy:2.8.4-alpine
+    <<: *hardening
+    cap_add:
+      - NET_BIND_SERVICE
+    networks: [edge]
+    image: caddy:2.11.7-alpine
     restart: unless-stopped
     ports:
       - "80:80"
@@ -25,8 +35,15 @@ services:
       - portal
 
   portal:
+    <<: *hardening
     build: ./portal
     restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    mem_limit: 1g
+    pids_limit: 200
+    networks: [edge, app]
     environment:
       MCP_SERVER_URL: http://mcp:3900/mcp
       MCP_API_KEY: ${MCP_API_KEY:?set MCP_API_KEY in .env}
@@ -38,12 +55,15 @@ services:
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
       OIDC_ALLOWED_DOMAINS: ${OIDC_ALLOWED_DOMAINS:-}
       OIDC_ALLOWED_EMAILS: ${OIDC_ALLOWED_EMAILS:-}
+      OIDC_ALLOW_ANY_ACCOUNT: ${OIDC_ALLOW_ANY_ACCOUNT:-false}
+      OIDC_TRUST_EMAIL_CLAIM: ${OIDC_TRUST_EMAIL_CLAIM:-false}
       INVITE_CODES: ${INVITE_CODES:-}
       SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in .env}
       INSTANCE_TTL_DAYS: ${INSTANCE_TTL_DAYS:-14}
       MAX_INSTANCES_PER_TESTER: ${MAX_INSTANCES_PER_TESTER:-3}
       MAX_DOCS_PER_INSTANCE: ${MAX_DOCS_PER_INSTANCE:-50}
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-20}
+      MAX_TEXT_CHARS: ${MAX_TEXT_CHARS:-2000000}
       SECURE_COOKIES: ${SECURE_COOKIES:-true}
     volumes:
       - portal_data:/data
@@ -52,8 +72,15 @@ services:
         condition: service_healthy
 
   mcp:
+    <<: *hardening
     build: ./mcp
     restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    mem_limit: 512m
+    pids_limit: 200
+    networks: [app, data]
     environment:
       QDRANT_URL: http://qdrant:6333
       QDRANT_COLLECTION: dev_default
@@ -68,17 +95,23 @@ services:
       - qdrant
 
   qdrant:
-    image: qdrant/qdrant:v1.19.2
+    image: qdrant/qdrant:v1.20.0
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    networks: [data]
     volumes:
       - qdrant_data:/qdrant/storage
 
   # Optional: run Ollama in this stack instead of pointing OLLAMA_URL at the
   # existing Ollama machine. Enable with --profile ollama.
   ollama:
-    image: ollama/ollama:0.5.7
+    image: ollama/ollama:0.40.13
     profiles: ["ollama"]
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    networks: [data]
     volumes:
       - ollama_data:/root/.ollama
     # Uncomment on a host with an NVIDIA GPU + nvidia-container-toolkit:
@@ -92,8 +125,9 @@ services:
 
   # One-shot: pulls the embed + chat models into the ollama volume, then exits.
   ollama-pull:
-    image: ollama/ollama:0.5.7
+    image: ollama/ollama:0.40.13
     profiles: ["ollama"]
+    networks: [data]
     environment:
       OLLAMA_HOST: http://ollama:11434
     entrypoint: ["/bin/sh", "-c"]
@@ -102,6 +136,11 @@ services:
     depends_on:
       - ollama
     restart: "no"
+
+networks:
+  edge:
+  app:
+  data:
 
 volumes:
   caddy_data:

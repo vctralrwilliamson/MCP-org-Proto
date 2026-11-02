@@ -21,9 +21,9 @@ export function load() {
 /** Persists the whole state; writes are serialised and atomic (tmp + rename). */
 export function save() {
   const snapshot = JSON.stringify(state, null, 2);
-  writing = writing.then(async () => {
+  writing = writing.catch(() => {}).then(async () => {
     const tmp = `${file}.tmp`;
-    await fs.promises.writeFile(tmp, snapshot);
+    await fs.promises.writeFile(tmp, snapshot, { mode: 0o600 });
     await fs.promises.rename(tmp, file);
   });
   return writing;
@@ -44,6 +44,8 @@ export function addInstance(instance) {
 
 export function removeInstance(id) {
   state.instances = state.instances.filter((i) => i.id !== id);
+  // Flags quote the tester's documents, so they go when the instance does.
+  state.feedback = state.feedback.filter((f) => f.instanceId !== id);
   return save();
 }
 

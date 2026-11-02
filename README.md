@@ -43,7 +43,8 @@ the internal Docker network only.
   `@qdrant/js-client-rest` 1.19, which is what `Projects/mcprag`'s lockfile
   already installs, so `ask` / `search_docs` fail there too until it gets
   the same fix.
-- The client is pinned to `~1.19.0` and Qdrant to `v1.19.2`. The client
+- The server refuses to start without `MCP_API_KEY`.
+- The client is pinned to `~1.20.0` and Qdrant to `v1.20.0`. The client
   refuses servers more than one minor version apart.
 
 ## Deploy on a new machine
@@ -80,17 +81,20 @@ with PKCE, via OpenID Connect discovery
 2. Put its issuer, client ID and client secret in `.env`:
    - **Microsoft Entra:** `OIDC_ISSUER=https://login.microsoftonline.com/<tenant-id>/v2.0`.
      Use your tenant ID, not `common`, so only your organization's accounts get in.
+     Entra doesn't send `email_verified`, so also set
+     `OIDC_TRUST_EMAIL_CLAIM=true`. Never set that on a multi-tenant app.
    - **Google:** `OIDC_ISSUER=https://accounts.google.com`
-3. Restrict who can sign in with `OIDC_ALLOWED_DOMAINS` (e.g. `vcu.edu`)
-   and/or `OIDC_ALLOWED_EMAILS`. If both are empty, anyone the provider
-   authenticates can use the sandbox.
+3. Say who can sign in with `OIDC_ALLOWED_DOMAINS` (e.g. `vcu.edu`) and/or
+   `OIDC_ALLOWED_EMAILS`. The portal won't start without one of them, unless
+   you set `OIDC_ALLOW_ANY_ACCOUNT=true`.
 
 Testers are identified by their email address (lowercased), so their
-instances follow them across devices. Sign-in is refused if the provider
-reports the email as unverified.
+instances follow them across devices. Sign-in is refused unless the provider
+says the email is verified.
 
-`AUTH_MODE=invite` keeps the old shared-code login for local testing. In
-that mode, instances are keyed by the name a tester types.
+`AUTH_MODE=invite` keeps the shared-code login for **local testing only**.
+Instances are keyed by the name a tester types, so anyone with a code can open
+anyone's instances.
 
 ## Data and admin
 
@@ -100,6 +104,8 @@ that mode, instances are keyed by the name a tester types.
   `docker compose exec portal cat /data/portal.json`
 - Vectors live in the `qdrant_data` volume.
 - An hourly sweep drops instances past their `expiresAt`.
+- Deleting or expiring an instance also deletes its "Not helpful" flags, since
+  they quote the tester's documents.
 - `docker compose down -v` wipes everything.
 
 ## Not built yet (from the admin console mockup)
