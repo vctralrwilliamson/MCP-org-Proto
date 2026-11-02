@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Dev Sandbox</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="bar">
+    <a class="brand" href="#/">Dev Sandbox</a>
+    <span class="who" id="who"></span>
+    <button class="link" id="logout" hidden>Sign out</button>
+  </header>
+
+  <main id="app">
+    <!-- Sign in -->
+    <section id="view-login" class="view card narrow" hidden>
+      <h1>Sign in</h1>
+      <div id="sso" hidden>
+        <p class="muted">Sign in with your organization account. Your instances are tied to your email address.</p>
+        <a class="button" href="/auth/login">Sign in with SSO</a>
+      </div>
+      <p class="muted" id="invite-intro" hidden>Use the invite code you were sent. Your instances are tied to the name you enter.</p>
+      <form id="login-form" hidden>
+        <label>Name or email<input name="name" autocomplete="username" required></label>
+        <label>Invite code<input name="code" autocomplete="one-time-code" required></label>
+        <button type="submit">Sign in</button>
+      </form>
+      <p class="error" id="login-error"></p>
+    </section>
+
+    <!-- Instance list -->
+    <section id="view-list" class="view" hidden>
+      <div class="row-head">
+        <h1>Your instances</h1>
+      </div>
+      <form id="new-form" class="card inline-form">
+        <input name="name" placeholder="New instance name (optional)" maxlength="80">
+        <button type="submit">New instance</button>
+      </form>
+      <p class="error" id="list-error"></p>
+      <ul id="instances" class="list"></ul>
+      <p class="muted empty" id="instances-empty" hidden>No instances yet. Create one to start uploading documents.</p>
+    </section>
+
+    <!-- Single instance -->
+    <section id="view-instance" class="view" hidden>
+      <div class="row-head">
+        <div>
+          <a href="#/" class="back">&larr; All instances</a>
+          <h1 id="inst-name"></h1>
+          <p class="muted" id="inst-meta"></p>
+        </div>
+        <button class="danger" id="inst-delete">Delete instance</button>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <h2>Documents</h2>
+          <form id="upload-form">
+            <label class="drop" id="drop">
+              <input type="file" name="files" multiple accept=".docx,.xlsx,.txt">
+              <span>Tap to choose .docx, .xlsx or .txt files</span>
+            </label>
+            <button type="submit">Upload &amp; index</button>
+          </form>
+          <p class="status" id="upload-status"></p>
+          <ul id="docs" class="list compact"></ul>
+          <p class="muted empty" id="docs-empty" hidden>No documents yet.</p>
+        </div>
+
+        <div class="card chat">
+          <h2>Chat</h2>
+          <p class="muted">Answers come only from this instance's documents.</p>
+          <div id="messages" class="messages" aria-live="polite"></div>
+          <form id="ask-form" class="inline-form">
+            <input name="question" placeholder="Ask about your documents" autocomplete="off" required>
+            <button type="submit">Ask</button>
+          </form>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <template id="tpl-answer">
+    <div class="msg bot">
+      <div class="body"></div>
+      <ol class="sources"></ol>
+      <div class="actions">
+        <button class="link flag">Not helpful</button>
+      </div>
+      <form class="flag-form" hidden>
+        <input name="note" placeholder="What was wrong? (optional)" maxlength="1000">
+        <button type="submit">Send</button>
+      </form>
+    </div>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>

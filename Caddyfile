@@ -1,0 +1,10 @@
+# DEV_DOMAIN=localhost gives a self-signed local cert; a real domain
+# (e.g. dev.wazzahappenin.com) gets a Let's Encrypt cert automatically once its
+# DNS points at this machine and ports 80/443 are open.
+{$DEV_DOMAIN} {
+	encode gzip
+	request_body {
+		max_size 210MB
+	}
+	reverse_proxy portal:3000
+}

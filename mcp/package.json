@@ -1,0 +1,20 @@
+{
+  "name": "mcp",
+  "version": "0.2.0",
+  "description": "Standalone MCP server on its own machine: Qdrant + Ollama, reachable over HTTP by site's chatbot.ts and documents.ts.",
+  "type": "module",
+  "main": "src/http-server.js",
+  "scripts": {
+    "start": "node src/http-server.js",
+    "dev-stdio": "node src/dev-stdio.js",
+    "backfill": "node src/backfill-cli.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.5.0",
+    "@qdrant/js-client-rest": "~1.19.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "uuid": "^10.0.0",
+    "zod": "^3.23.8"
+  }
+}
